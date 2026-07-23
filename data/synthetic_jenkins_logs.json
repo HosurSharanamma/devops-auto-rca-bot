@@ -1,0 +1,282 @@
+[
+  {
+    "id": "inc-0010",
+    "log_text": "pip install failed: Could not find a version that satisfies the requirement torch==2.1.9 (from versions: 2.0.0, 2.0.1, 2.1.0)",
+    "root_cause_category": "DEPENDENCY_RESOLUTION",
+    "root_cause": "The build failed to resolve one or more package dependencies due to a version conflict, a missing/removed package version, or an unreachable/misconfigured package registry.",
+    "fix_recommendation": "Pin dependency versions in the lockfile, verify registry connectivity/credentials, and add a private registry mirror/cache to reduce reliance on upstream availability."
+  },
+  {
+    "id": "inc-0004",
+    "log_text": "Docker build failed: the container was killed due to memory pressure while running integration tests.",
+    "root_cause_category": "OOM_KILLED",
+    "root_cause": "The build container exceeded its allocated memory limit and was killed by the OS/cgroup OOM killer, typically due to a memory-heavy compile/test step or a memory leak in a long-running test suite.",
+    "fix_recommendation": "Increase the executor/container memory limit, split the test suite into smaller parallel shards, or add -Xmx tuning for JVM-based builds. Add memory usage monitoring to catch regressions early."
+  },
+  {
+    "id": "inc-0011",
+    "log_text": "Maven build failed: Could not resolve dependencies for project com.acme:service-a: Could not find artifact com.acme:common:jar:3.4.1",
+    "root_cause_category": "DEPENDENCY_RESOLUTION",
+    "root_cause": "The build failed to resolve one or more package dependencies due to a version conflict, a missing/removed package version, or an unreachable/misconfigured package registry.",
+    "fix_recommendation": "Pin dependency versions in the lockfile, verify registry connectivity/credentials, and add a private registry mirror/cache to reduce reliance on upstream availability."
+  },
+  {
+    "id": "inc-0037",
+    "log_text": "ESLint failed: 14 errors found, 3 of which are auto-fixable with the `--fix` option.",
+    "root_cause_category": "LINTING_STATIC_ANALYSIS",
+    "root_cause": "The pipeline failed at a static analysis/linting gate because newly introduced code violated formatting, style, or security-scanning rules enforced by the project's quality gate.",
+    "fix_recommendation": "Run linters/formatters locally via pre-commit hooks before pushing, and provide clear autofix suggestions in CI logs to shorten the feedback loop."
+  },
+  {
+    "id": "inc-0026",
+    "log_text": "docker build failed: write /var/lib/docker/tmp/...: no space left on device",
+    "root_cause_category": "DISK_SPACE",
+    "root_cause": "The build agent ran out of available disk space, usually caused by accumulated build artifacts, Docker image layers, or log files that were never cleaned up between runs.",
+    "fix_recommendation": "Add automated workspace/artifact cleanup after each build, prune unused Docker images/volumes on a schedule, and add disk-usage alerting on build agents."
+  },
+  {
+    "id": "inc-0025",
+    "log_text": "Build failed: java.io.IOException: No space left on device while writing target/classes.",
+    "root_cause_category": "DISK_SPACE",
+    "root_cause": "The build agent ran out of available disk space, usually caused by accumulated build artifacts, Docker image layers, or log files that were never cleaned up between runs.",
+    "fix_recommendation": "Add automated workspace/artifact cleanup after each build, prune unused Docker images/volumes on a schedule, and add disk-usage alerting on build agents."
+  },
+  {
+    "id": "inc-0031",
+    "log_text": "Contract test 'test_order_api_response_schema' failed: response missing required field 'orderStatus'.",
+    "root_cause_category": "UNIT_TEST_REGRESSION",
+    "root_cause": "A genuine code regression caused unit test assertions to fail consistently across runs, indicating the most recent code change broke expected behaviour rather than any environmental/infra issue.",
+    "fix_recommendation": "Review the diff introduced in the failing commit, add/adjust unit tests to cover the regression, and add the failing scenario to the pre-merge check suite."
+  },
+  {
+    "id": "inc-0012",
+    "log_text": "yarn install failed: Response code 401 (Unauthorized) while fetching packages from private registry.",
+    "root_cause_category": "DEPENDENCY_RESOLUTION",
+    "root_cause": "The build failed to resolve one or more package dependencies due to a version conflict, a missing/removed package version, or an unreachable/misconfigured package registry.",
+    "fix_recommendation": "Pin dependency versions in the lockfile, verify registry connectivity/credentials, and add a private registry mirror/cache to reduce reliance on upstream availability."
+  },
+  {
+    "id": "inc-0005",
+    "log_text": "Test 'test_async_callback_completes' failed once out of five reruns with AssertionError: expected True, got False.",
+    "root_cause_category": "TEST_FLAKINESS",
+    "root_cause": "A test failed intermittently due to timing/race conditions (e.g. asynchronous calls not properly awaited, shared mutable test state, or reliance on wall-clock timing) rather than an actual code defect.",
+    "fix_recommendation": "Add explicit waits/polling instead of fixed sleeps, isolate test state between runs, mark the test for quarantine/retry, and track flakiness rate in the test dashboard."
+  },
+  {
+    "id": "inc-0033",
+    "log_text": "Terraform apply failed: Error: Error creating VPC: VpcLimitExceeded: The maximum number of VPCs has been reached.",
+    "root_cause_category": "INFRA_PROVISIONING_FAILURE",
+    "root_cause": "The pipeline failed while provisioning or scaling infrastructure (Kubernetes pods, cloud VMs, Terraform-managed resources), typically due to quota limits, misconfigured IAM permissions, or a broken infrastructure-as-code definition.",
+    "fix_recommendation": "Add quota monitoring and pre-flight checks before provisioning, validate Terraform plans in CI before apply, and ensure least-privilege IAM roles are correctly scoped and tested."
+  },
+  {
+    "id": "inc-0022",
+    "log_text": "AWS CLI error: An error occurred (ExpiredToken) when calling the AssumeRole operation.",
+    "root_cause_category": "CREDENTIAL_AUTH_FAILURE",
+    "root_cause": "The pipeline failed because of expired, revoked, or misconfigured credentials (API keys, service account tokens, SSH keys) needed to access a required service.",
+    "fix_recommendation": "Rotate and store credentials in a managed secrets store (e.g. Vault, AWS Secrets Manager), add expiry alerts, and audit which pipeline stages use which credentials."
+  },
+  {
+    "id": "inc-0029",
+    "log_text": "Test 'test_calculate_discount_applies_correctly' failed consistently across 5/5 runs: AssertionError: expected 90.0, got 100.0",
+    "root_cause_category": "UNIT_TEST_REGRESSION",
+    "root_cause": "A genuine code regression caused unit test assertions to fail consistently across runs, indicating the most recent code change broke expected behaviour rather than any environmental/infra issue.",
+    "fix_recommendation": "Review the diff introduced in the failing commit, add/adjust unit tests to cover the regression, and add the failing scenario to the pre-merge check suite."
+  },
+  {
+    "id": "inc-0024",
+    "log_text": "SonarQube analysis failed: 401 Unauthorized - invalid or expired authentication token.",
+    "root_cause_category": "CREDENTIAL_AUTH_FAILURE",
+    "root_cause": "The pipeline failed because of expired, revoked, or misconfigured credentials (API keys, service account tokens, SSH keys) needed to access a required service.",
+    "fix_recommendation": "Rotate and store credentials in a managed secrets store (e.g. Vault, AWS Secrets Manager), add expiry alerts, and audit which pipeline stages use which credentials."
+  },
+  {
+    "id": "inc-0019",
+    "log_text": "Deploy step failed: kubectl apply timed out waiting for the condition after 60s, API server unreachable.",
+    "root_cause_category": "NETWORK_TIMEOUT",
+    "root_cause": "A network call to an external service (artifact repository, API dependency, or downstream microservice) exceeded the configured timeout, most likely due to transient network instability, DNS resolution delay, or the downstream service being overloaded.",
+    "fix_recommendation": "Add retry-with-backoff around network calls, increase timeout thresholds where appropriate, and add circuit breakers plus alerting on downstream service latency."
+  },
+  {
+    "id": "inc-0013",
+    "log_text": "Pipeline failed at 'Load Config' stage: yaml.scanner.ScannerError: mapping values are not allowed here, line 12, column 12.",
+    "root_cause_category": "CONFIG_ERROR",
+    "root_cause": "A malformed or missing configuration file (YAML/TOML/JSON) caused the pipeline to fail during the parsing/validation stage before any real build work started.",
+    "fix_recommendation": "Add schema validation for config files as a pre-commit hook, provide clear structured error messages on parse failure, and fail fast with actionable line/column information."
+  },
+  {
+    "id": "inc-0035",
+    "log_text": "Provisioning step failed: AccessDenied: User is not authorized to perform: ec2:RunInstances",
+    "root_cause_category": "INFRA_PROVISIONING_FAILURE",
+    "root_cause": "The pipeline failed while provisioning or scaling infrastructure (Kubernetes pods, cloud VMs, Terraform-managed resources), typically due to quota limits, misconfigured IAM permissions, or a broken infrastructure-as-code definition.",
+    "fix_recommendation": "Add quota monitoring and pre-flight checks before provisioning, validate Terraform plans in CI before apply, and ensure least-privilege IAM roles are correctly scoped and tested."
+  },
+  {
+    "id": "inc-0036",
+    "log_text": "Helm install failed: 1 error occurred: timed out waiting for the condition, deployment 'api-gateway' not ready.",
+    "root_cause_category": "INFRA_PROVISIONING_FAILURE",
+    "root_cause": "The pipeline failed while provisioning or scaling infrastructure (Kubernetes pods, cloud VMs, Terraform-managed resources), typically due to quota limits, misconfigured IAM permissions, or a broken infrastructure-as-code definition.",
+    "fix_recommendation": "Add quota monitoring and pre-flight checks before provisioning, validate Terraform plans in CI before apply, and ensure least-privilege IAM roles are correctly scoped and tested."
+  },
+  {
+    "id": "inc-0027",
+    "log_text": "Jenkins agent offline: disk usage on /var/lib/jenkins exceeded 95% threshold, marking node temporarily offline.",
+    "root_cause_category": "DISK_SPACE",
+    "root_cause": "The build agent ran out of available disk space, usually caused by accumulated build artifacts, Docker image layers, or log files that were never cleaned up between runs.",
+    "fix_recommendation": "Add automated workspace/artifact cleanup after each build, prune unused Docker images/volumes on a schedule, and add disk-usage alerting on build agents."
+  },
+  {
+    "id": "inc-0014",
+    "log_text": "Build aborted: tomllib.TOMLDecodeError: Invalid statement (at line 4, column 1) while parsing pyproject.toml.",
+    "root_cause_category": "CONFIG_ERROR",
+    "root_cause": "A malformed or missing configuration file (YAML/TOML/JSON) caused the pipeline to fail during the parsing/validation stage before any real build work started.",
+    "fix_recommendation": "Add schema validation for config files as a pre-commit hook, provide clear structured error messages on parse failure, and fail fast with actionable line/column information."
+  },
+  {
+    "id": "inc-0023",
+    "log_text": "Docker login failed: unauthorized: authentication required for registry.internal.acme.com",
+    "root_cause_category": "CREDENTIAL_AUTH_FAILURE",
+    "root_cause": "The pipeline failed because of expired, revoked, or misconfigured credentials (API keys, service account tokens, SSH keys) needed to access a required service.",
+    "fix_recommendation": "Rotate and store credentials in a managed secrets store (e.g. Vault, AWS Secrets Manager), add expiry alerts, and audit which pipeline stages use which credentials."
+  },
+  {
+    "id": "inc-0021",
+    "log_text": "git push failed: fatal: Authentication failed for 'https://github.com/acme/service-a.git/'",
+    "root_cause_category": "CREDENTIAL_AUTH_FAILURE",
+    "root_cause": "The pipeline failed because of expired, revoked, or misconfigured credentials (API keys, service account tokens, SSH keys) needed to access a required service.",
+    "fix_recommendation": "Rotate and store credentials in a managed secrets store (e.g. Vault, AWS Secrets Manager), add expiry alerts, and audit which pipeline stages use which credentials."
+  },
+  {
+    "id": "inc-0032",
+    "log_text": "Regression test 'test_user_permission_boundary' failed on every run since commit a3f9c1.",
+    "root_cause_category": "UNIT_TEST_REGRESSION",
+    "root_cause": "A genuine code regression caused unit test assertions to fail consistently across runs, indicating the most recent code change broke expected behaviour rather than any environmental/infra issue.",
+    "fix_recommendation": "Review the diff introduced in the failing commit, add/adjust unit tests to cover the regression, and add the failing scenario to the pre-merge check suite."
+  },
+  {
+    "id": "inc-0038",
+    "log_text": "flake8 failed: E501 line too long (92 > 79 characters) in utils/log_cleaning.py:44",
+    "root_cause_category": "LINTING_STATIC_ANALYSIS",
+    "root_cause": "The pipeline failed at a static analysis/linting gate because newly introduced code violated formatting, style, or security-scanning rules enforced by the project's quality gate.",
+    "fix_recommendation": "Run linters/formatters locally via pre-commit hooks before pushing, and provide clear autofix suggestions in CI logs to shorten the feedback loop."
+  },
+  {
+    "id": "inc-0030",
+    "log_text": "Test suite 'PaymentServiceTests' failed 12 tests after merging PR #482, all related to currency rounding logic.",
+    "root_cause_category": "UNIT_TEST_REGRESSION",
+    "root_cause": "A genuine code regression caused unit test assertions to fail consistently across runs, indicating the most recent code change broke expected behaviour rather than any environmental/infra issue.",
+    "fix_recommendation": "Review the diff introduced in the failing commit, add/adjust unit tests to cover the regression, and add the failing scenario to the pre-merge check suite."
+  },
+  {
+    "id": "inc-0020",
+    "log_text": "Docker pull failed: net/http: TLS handshake timeout while pulling base image from private registry.",
+    "root_cause_category": "NETWORK_TIMEOUT",
+    "root_cause": "A network call to an external service (artifact repository, API dependency, or downstream microservice) exceeded the configured timeout, most likely due to transient network instability, DNS resolution delay, or the downstream service being overloaded.",
+    "fix_recommendation": "Add retry-with-backoff around network calls, increase timeout thresholds where appropriate, and add circuit breakers plus alerting on downstream service latency."
+  },
+  {
+    "id": "inc-0017",
+    "log_text": "curl: (28) Failed to connect to artifacts.internal.acme.com port 443 after 30001 ms: Operation timed out.",
+    "root_cause_category": "NETWORK_TIMEOUT",
+    "root_cause": "A network call to an external service (artifact repository, API dependency, or downstream microservice) exceeded the configured timeout, most likely due to transient network instability, DNS resolution delay, or the downstream service being overloaded.",
+    "fix_recommendation": "Add retry-with-backoff around network calls, increase timeout thresholds where appropriate, and add circuit breakers plus alerting on downstream service latency."
+  },
+  {
+    "id": "inc-0040",
+    "log_text": "clippy failed: warning: unused variable 'cfg' denied by #[deny(warnings)] in src/main.rs",
+    "root_cause_category": "LINTING_STATIC_ANALYSIS",
+    "root_cause": "The pipeline failed at a static analysis/linting gate because newly introduced code violated formatting, style, or security-scanning rules enforced by the project's quality gate.",
+    "fix_recommendation": "Run linters/formatters locally via pre-commit hooks before pushing, and provide clear autofix suggestions in CI logs to shorten the feedback loop."
+  },
+  {
+    "id": "inc-0034",
+    "log_text": "kubectl apply failed: pods 'worker-deploy' is forbidden: exceeded quota: compute-resources, requested: cpu=4, used: cpu=30, limited: cpu=32",
+    "root_cause_category": "INFRA_PROVISIONING_FAILURE",
+    "root_cause": "The pipeline failed while provisioning or scaling infrastructure (Kubernetes pods, cloud VMs, Terraform-managed resources), typically due to quota limits, misconfigured IAM permissions, or a broken infrastructure-as-code definition.",
+    "fix_recommendation": "Add quota monitoring and pre-flight checks before provisioning, validate Terraform plans in CI before apply, and ensure least-privilege IAM roles are correctly scoped and tested."
+  },
+  {
+    "id": "inc-0003",
+    "log_text": "Gradle daemon crashed unexpectedly. Exit value 137. Kernel log shows OOM-killer invoked for gradle process.",
+    "root_cause_category": "OOM_KILLED",
+    "root_cause": "The build container exceeded its allocated memory limit and was killed by the OS/cgroup OOM killer, typically due to a memory-heavy compile/test step or a memory leak in a long-running test suite.",
+    "fix_recommendation": "Increase the executor/container memory limit, split the test suite into smaller parallel shards, or add -Xmx tuning for JVM-based builds. Add memory usage monitoring to catch regressions early."
+  },
+  {
+    "id": "inc-0001",
+    "log_text": "Build step 'mvn test' failed. Container exited with code 137. dmesg: Out of memory: Killed process (java).",
+    "root_cause_category": "OOM_KILLED",
+    "root_cause": "The build container exceeded its allocated memory limit and was killed by the OS/cgroup OOM killer, typically due to a memory-heavy compile/test step or a memory leak in a long-running test suite.",
+    "fix_recommendation": "Increase the executor/container memory limit, split the test suite into smaller parallel shards, or add -Xmx tuning for JVM-based builds. Add memory usage monitoring to catch regressions early."
+  },
+  {
+    "id": "inc-0039",
+    "log_text": "Bandit security scan failed: B105 hardcoded_password_string detected in config/settings.py",
+    "root_cause_category": "LINTING_STATIC_ANALYSIS",
+    "root_cause": "The pipeline failed at a static analysis/linting gate because newly introduced code violated formatting, style, or security-scanning rules enforced by the project's quality gate.",
+    "fix_recommendation": "Run linters/formatters locally via pre-commit hooks before pushing, and provide clear autofix suggestions in CI logs to shorten the feedback loop."
+  },
+  {
+    "id": "inc-0028",
+    "log_text": "npm ERR! ENOSPC: no space left on device, write",
+    "root_cause_category": "DISK_SPACE",
+    "root_cause": "The build agent ran out of available disk space, usually caused by accumulated build artifacts, Docker image layers, or log files that were never cleaned up between runs.",
+    "fix_recommendation": "Add automated workspace/artifact cleanup after each build, prune unused Docker images/volumes on a schedule, and add disk-usage alerting on build agents."
+  },
+  {
+    "id": "inc-0006",
+    "log_text": "Selenium test 'test_login_button_visible' failed with ElementNotInteractableException, passed on rerun.",
+    "root_cause_category": "TEST_FLAKINESS",
+    "root_cause": "A test failed intermittently due to timing/race conditions (e.g. asynchronous calls not properly awaited, shared mutable test state, or reliance on wall-clock timing) rather than an actual code defect.",
+    "fix_recommendation": "Add explicit waits/polling instead of fixed sleeps, isolate test state between runs, mark the test for quarantine/retry, and track flakiness rate in the test dashboard."
+  },
+  {
+    "id": "inc-0007",
+    "log_text": "Integration test 'test_message_queue_consumer' timed out waiting for message, consumer received it 200ms later.",
+    "root_cause_category": "TEST_FLAKINESS",
+    "root_cause": "A test failed intermittently due to timing/race conditions (e.g. asynchronous calls not properly awaited, shared mutable test state, or reliance on wall-clock timing) rather than an actual code defect.",
+    "fix_recommendation": "Add explicit waits/polling instead of fixed sleeps, isolate test state between runs, mark the test for quarantine/retry, and track flakiness rate in the test dashboard."
+  },
+  {
+    "id": "inc-0009",
+    "log_text": "npm install failed: 404 Not Found - GET https://registry.npmjs.org/left-pad/-/left-pad-1.3.1.tgz",
+    "root_cause_category": "DEPENDENCY_RESOLUTION",
+    "root_cause": "The build failed to resolve one or more package dependencies due to a version conflict, a missing/removed package version, or an unreachable/misconfigured package registry.",
+    "fix_recommendation": "Pin dependency versions in the lockfile, verify registry connectivity/credentials, and add a private registry mirror/cache to reduce reliance on upstream availability."
+  },
+  {
+    "id": "inc-0015",
+    "log_text": "Jenkinsfile syntax error: expected a step @ line 34, column 5. WorkflowScript.",
+    "root_cause_category": "CONFIG_ERROR",
+    "root_cause": "A malformed or missing configuration file (YAML/TOML/JSON) caused the pipeline to fail during the parsing/validation stage before any real build work started.",
+    "fix_recommendation": "Add schema validation for config files as a pre-commit hook, provide clear structured error messages on parse failure, and fail fast with actionable line/column information."
+  },
+  {
+    "id": "inc-0016",
+    "log_text": "Config validation failed: 'environment' key missing required field 'region' in deploy-config.yaml.",
+    "root_cause_category": "CONFIG_ERROR",
+    "root_cause": "A malformed or missing configuration file (YAML/TOML/JSON) caused the pipeline to fail during the parsing/validation stage before any real build work started.",
+    "fix_recommendation": "Add schema validation for config files as a pre-commit hook, provide clear structured error messages on parse failure, and fail fast with actionable line/column information."
+  },
+  {
+    "id": "inc-0018",
+    "log_text": "requests.exceptions.ConnectTimeout: HTTPSConnectionPool(host='api.partner.com', port=443): Max retries exceeded.",
+    "root_cause_category": "NETWORK_TIMEOUT",
+    "root_cause": "A network call to an external service (artifact repository, API dependency, or downstream microservice) exceeded the configured timeout, most likely due to transient network instability, DNS resolution delay, or the downstream service being overloaded.",
+    "fix_recommendation": "Add retry-with-backoff around network calls, increase timeout thresholds where appropriate, and add circuit breakers plus alerting on downstream service latency."
+  },
+  {
+    "id": "inc-0002",
+    "log_text": "Jenkins agent lost connection during 'npm run build'. Container OOMKilled by Kubernetes. Memory limit was 2Gi.",
+    "root_cause_category": "OOM_KILLED",
+    "root_cause": "The build container exceeded its allocated memory limit and was killed by the OS/cgroup OOM killer, typically due to a memory-heavy compile/test step or a memory leak in a long-running test suite.",
+    "fix_recommendation": "Increase the executor/container memory limit, split the test suite into smaller parallel shards, or add -Xmx tuning for JVM-based builds. Add memory usage monitoring to catch regressions early."
+  },
+  {
+    "id": "inc-0008",
+    "log_text": "Unit test 'test_cache_expiry' failed intermittently in CI but never fails locally, suspected race condition on shared cache singleton.",
+    "root_cause_category": "TEST_FLAKINESS",
+    "root_cause": "A test failed intermittently due to timing/race conditions (e.g. asynchronous calls not properly awaited, shared mutable test state, or reliance on wall-clock timing) rather than an actual code defect.",
+    "fix_recommendation": "Add explicit waits/polling instead of fixed sleeps, isolate test state between runs, mark the test for quarantine/retry, and track flakiness rate in the test dashboard."
+  }
+]

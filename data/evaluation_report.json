@@ -1,0 +1,7 @@
+{
+  "n_queries": 40,
+  "top_1_accuracy": 0.725,
+  "top_3_accuracy": 1.0,
+  "avg_top1_similarity": 0.8044,
+  "avg_latency_ms": 404.78
+}

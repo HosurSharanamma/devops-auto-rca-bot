@@ -1,0 +1,62 @@
+// Example Jenkinsfile snippet showing how a real pipeline calls the Auto-RCA
+// Bot API automatically when a build fails, and posts the result to Slack.
+//
+// This is the piece referenced in the capstone doc's "Jenkins integration"
+// and demonstrates end-to-end usage beyond the manual Streamlit demo.
+
+pipeline {
+    agent any
+
+    environment {
+        RCA_API_URL = 'http://rca-bot.internal:8000/rca'
+        SLACK_CHANNEL = '#ci-alerts'
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                sh 'mvn clean install'
+            }
+        }
+        stage('Test') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+    }
+
+    post {
+        failure {
+            script {
+                def consoleLog = currentBuild.rawBuild.getLog(200).join('\n')
+
+                def payload = groovy.json.JsonOutput.toJson([
+                    log_text   : consoleLog,
+                    top_k      : 3,
+                    job_name   : env.JOB_NAME,
+                    build_number: env.BUILD_NUMBER as Integer
+                ])
+
+                def response = httpRequest(
+                    url: env.RCA_API_URL,
+                    httpMode: 'POST',
+                    contentType: 'APPLICATION_JSON',
+                    requestBody: payload,
+                    timeout: 30,
+                    validResponseCodes: '100:499'
+                )
+
+                def rca = readJSON text: response.content
+
+                def message = """:red_circle: *Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}*
+*Root cause:* ${rca.root_cause}
+*Suggested fix:* ${rca.fix_recommendation}
+*Confidence:* ${(rca.confidence * 100).round(0)}%
+${rca.low_confidence_flag ? ':warning: Low confidence — please review manually.' : ''}
+${env.BUILD_URL}console"""
+
+                slackSend(channel: env.SLACK_CHANNEL, message: message)
+            }
+        }
+    }
+}
