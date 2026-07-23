@@ -10,6 +10,13 @@ See `RUBRIC_MAPPING.md` for exactly how each part of this repo maps to the
 grading rubric, and `DEMO_SCRIPT.md` for a step-by-step walkthrough to present
 to the evaluator.
 
+## Try it live
+There's also a public, no-setup-required version of this tool — see
+[`live/README.md`](live/README.md) for the deployment guide, or just open
+the deployed link if one is already live for this repo. It swaps the local
+LM Studio + sentence-transformers stack for a free hosted LLM (Groq) and a
+lighter embedding approach, so it can run entirely on a free hosting tier.
+
 ## Architecture
 
 ```
