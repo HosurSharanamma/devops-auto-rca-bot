@@ -71,7 +71,7 @@ def _build_prompt(cleaned_log_text: str, incidents: list[dict]) -> str:
 
 @retry(
     reraise=True,
-    stop=stop_after_attempt(1),
+    stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=8),
     retry=retry_if_exception_type((requests.exceptions.RequestException, LLMCallError)),
 )
