@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auto-rca-bot-api
+  namespace: auto-rca-bot
+  labels:
+    app: auto-rca-bot-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auto-rca-bot-api
+  template:
+    metadata:
+      labels:
+        app: auto-rca-bot-api
+    spec:
+      containers:
+        - name: api
+          image: 533267099143.dkr.ecr.eu-central-1.amazonaws.com/auto-rca-bot-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: auto-rca-bot-config
+          env:
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: auto-rca-bot-secrets
+                  key: LLM_API_KEY
+          # Requests/limits sized to actually fit on a single t3.medium node
+          # (4GiB RAM, 2 vCPU, minus what kube-system/aws-node/coredns
+          # already reserve) alongside the UI pod -- not arbitrary numbers.
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "900Mi"
+          # Reuses the same /health endpoint built in Day 1 -- single
+          # source of truth for "is this pod actually working", not just
+          # "is the process alive".
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3

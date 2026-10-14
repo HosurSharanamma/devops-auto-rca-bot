@@ -1,0 +1,68 @@
+name: CD - deploy to EKS
+
+# Deliberately MANUAL ONLY (workflow_dispatch), never automatic on push.
+# Why: the EKS cluster is destroyed at the end of every session (cost
+# discipline) and only exists while you're actively working. An
+# auto-deploy-on-push workflow would fail most of the time (no cluster to
+# deploy to) and, worse, would be a trap the one time it DID succeed by
+# coincidentally running while the cluster happened to be up. You trigger
+# this by hand, from the Actions tab, only after `terraform apply` has
+# given you a live cluster for the session.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (a commit SHA from a CI run, or 'latest')"
+        required: true
+        default: "latest"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-central-1
+  AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+  CLUSTER_NAME: auto-rca-bot
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "v1.31.0"
+
+      - name: Point kubectl at the cluster
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
+
+      - name: Look up the ECR registry for this account
+        id: ecr
+        run: echo "registry=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy the chosen tag
+        run: |
+          kubectl set image deployment/auto-rca-bot-api \
+            api=${{ steps.ecr.outputs.registry }}/auto-rca-bot-api:${{ inputs.image_tag }} \
+            -n auto-rca-bot
+
+          kubectl set image deployment/auto-rca-bot-ui \
+            ui=${{ steps.ecr.outputs.registry }}/auto-rca-bot-ui:${{ inputs.image_tag }} \
+            -n auto-rca-bot
+
+      - name: Wait for rollout to finish
+        run: |
+          kubectl rollout status deployment/auto-rca-bot-api -n auto-rca-bot --timeout=180s
+          kubectl rollout status deployment/auto-rca-bot-ui -n auto-rca-bot --timeout=180s
+
+      - name: Summary
+        run: |
+          echo "### Deployed tag \`${{ inputs.image_tag }}\` to EKS" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n auto-rca-bot >> $GITHUB_STEP_SUMMARY

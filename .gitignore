@@ -5,3 +5,11 @@ data/chroma_store/
 finetune/output/
 .env
 .DS_Store
+
+checkpoints/
+.pytest_cache/
+api-logs.txt
+*.zip
+*.tfstate
+*.tfstate.backup
+.terraform/

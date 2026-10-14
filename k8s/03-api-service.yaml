@@ -1,0 +1,14 @@
+# ClusterIP (internal only, default type) -- the API is never exposed
+# outside the cluster directly. Only the UI talks to it, over the
+# cluster-internal DNS name "auto-rca-bot-api" (see ConfigMap).
+apiVersion: v1
+kind: Service
+metadata:
+  name: auto-rca-bot-api
+  namespace: auto-rca-bot
+spec:
+  selector:
+    app: auto-rca-bot-api
+  ports:
+    - port: 8000
+      targetPort: 8000

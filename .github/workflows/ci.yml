@@ -1,0 +1,79 @@
+name: CI - build and push images
+
+# Runs on every push to main that touches app code, plus a manual button in
+# the Actions tab for re-running without a new commit. Does NOT touch AWS
+# infrastructure or deploy anything -- it only builds the two Docker images
+# and pushes them to ECR, tagged with the exact commit SHA (immutable) and
+# `latest` (for convenience). The commit-SHA tag is what fixes the "mutable
+# :latest" gap flagged back on Day 3: you can now always point a deployment
+# at the exact code that produced an image, not just "whatever :latest
+# happens to be right now."
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "rag/**"
+      - "ui/**"
+      - "models/**"
+      - "utils/**"
+      - "docker/**"
+      - "requirements.txt"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # required to request the OIDC token
+  contents: read
+
+env:
+  AWS_REGION: eu-central-1
+  # Set this once in your GitHub repo: Settings -> Secrets and variables ->
+  # Actions -> Variables tab -> New repository variable.
+  # Name: AWS_ROLE_ARN, Value: the `github_actions_role_arn` output from
+  # `terraform-base` (run `terraform output github_actions_role_arn` there).
+  # This is a role ARN, not a credential -- it's safe to have it visible in
+  # workflow runs and repo settings; nobody can assume it without a token
+  # signed by GitHub for THIS exact repo.
+  AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC (no stored AWS keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push API image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          docker build -f docker/api.Dockerfile -t "$REGISTRY/auto-rca-bot-api:${{ github.sha }}" -t "$REGISTRY/auto-rca-bot-api:latest" .
+          docker push "$REGISTRY/auto-rca-bot-api:${{ github.sha }}"
+          docker push "$REGISTRY/auto-rca-bot-api:latest"
+
+      - name: Build and push UI image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          docker build -f docker/ui.Dockerfile -t "$REGISTRY/auto-rca-bot-ui:${{ github.sha }}" -t "$REGISTRY/auto-rca-bot-ui:latest" .
+          docker push "$REGISTRY/auto-rca-bot-ui:${{ github.sha }}"
+          docker push "$REGISTRY/auto-rca-bot-ui:latest"
+
+      - name: Summary
+        run: |
+          echo "### Images pushed" >> $GITHUB_STEP_SUMMARY
+          echo "- auto-rca-bot-api:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- auto-rca-bot-ui:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Run the **CD - deploy to EKS** workflow next, using tag \`${{ github.sha }}\`, once your cluster is up (\`terraform apply\` in \`terraform/\`)." >> $GITHUB_STEP_SUMMARY

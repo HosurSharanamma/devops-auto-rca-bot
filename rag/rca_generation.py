@@ -12,10 +12,32 @@ from dataclasses import dataclass, field
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+# LM_STUDIO_BASE_URL / LM_STUDIO_MODEL are kept as-is for local dev (LM Studio,
+# no auth needed). For cloud deployment, point these at any OpenAI-compatible
+# hosted endpoint (e.g. Groq: https://api.groq.com/openai/v1) and set
+# LLM_API_KEY -- no other code changes needed.
 LM_STUDIO_BASE_URL = os.environ.get("LM_STUDIO_BASE_URL", "http://localhost:1234/v1")
 LM_STUDIO_MODEL = os.environ.get("LM_STUDIO_MODEL", "mistral-7b-instruct")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 REQUEST_TIMEOUT_SECONDS = float(os.environ.get("LLM_TIMEOUT_SECONDS", "400"))
 LOW_CONFIDENCE_THRESHOLD = 0.45
+
+
+def _auth_headers() -> dict:
+    """Bearer header when LLM_API_KEY is set (hosted APIs like Groq); empty
+    dict for local LM Studio, which needs no auth."""
+    return {"Authorization": f"Bearer {LLM_API_KEY}"} if LLM_API_KEY else {}
+
+
+def check_llm_reachable() -> bool:
+    """Used by api/main.py's /health endpoint. Single source of truth for
+    how we talk to the LLM backend, so the health check and the real call
+    never drift apart."""
+    try:
+        resp = requests.get(f"{LM_STUDIO_BASE_URL}/models", headers=_auth_headers(), timeout=3)
+        return resp.status_code == 200
+    except requests.exceptions.RequestException:
+        return False
 
 SYSTEM_PROMPT = """You are an expert DevOps Root Cause Analysis assistant for Jenkins CI/CD pipelines.
 You are given a NEW failure log and, when available, SIMILAR PAST INCIDENTS retrieved from a
@@ -78,6 +100,7 @@ def _build_prompt(cleaned_log_text: str, incidents: list[dict]) -> str:
 def _call_llm(prompt: str) -> str:
     response = requests.post(
         f"{LM_STUDIO_BASE_URL}/chat/completions",
+        headers=_auth_headers(),
         json={
             "model": LM_STUDIO_MODEL,
             "messages": [

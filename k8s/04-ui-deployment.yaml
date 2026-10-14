@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auto-rca-bot-ui
+  namespace: auto-rca-bot
+  labels:
+    app: auto-rca-bot-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auto-rca-bot-ui
+  template:
+    metadata:
+      labels:
+        app: auto-rca-bot-ui
+    spec:
+      containers:
+        - name: ui
+          image: 533267099143.dkr.ecr.eu-central-1.amazonaws.com/auto-rca-bot-ui:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8501
+          envFrom:
+            - configMapRef:
+                name: auto-rca-bot-config
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          # TCP check rather than HTTP -- works regardless of which
+          # Streamlit version is pinned (the HTTP health path changed
+          # across versions), and is enough to prove the process is up
+          # and accepting connections.
+          readinessProbe:
+            tcpSocket:
+              port: 8501
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8501
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3

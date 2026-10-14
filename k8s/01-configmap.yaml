@@ -1,0 +1,16 @@
+# Non-secret config. The actual Groq API key is NOT in here -- it goes into
+# a Kubernetes Secret created directly from the command line (see README),
+# never written into a YAML file that could end up committed to git.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auto-rca-bot-config
+  namespace: auto-rca-bot
+data:
+  LM_STUDIO_BASE_URL: "https://api.groq.com/openai/v1"
+  # Check console.groq.com for the current supported model name before
+  # relying on this -- Groq's available free-tier models change over time.
+  LM_STUDIO_MODEL: "qwen/qwen3.8-27b"
+  # Internal cluster DNS name for the API service (see 03-api-service.yaml).
+  # Same-namespace pods can reach it by this short name alone.
+  RCA_API_BASE_URL: "http://auto-rca-bot-api:8000"

@@ -1,0 +1,16 @@
+# Local state holds resource details and should never be committed --
+# especially since this project is using local state deliberately (no S3
+# backend yet).
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc

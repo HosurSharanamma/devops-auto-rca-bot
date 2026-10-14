@@ -1,0 +1,15 @@
+# NodePort, not LoadBalancer -- deliberate cost choice (see README). Access
+# it via `kubectl port-forward` rather than hitting the node's public IP
+# directly, since the node's security group isn't opened for this port.
+apiVersion: v1
+kind: Service
+metadata:
+  name: auto-rca-bot-ui
+  namespace: auto-rca-bot
+spec:
+  type: NodePort
+  selector:
+    app: auto-rca-bot-ui
+  ports:
+    - port: 8501
+      targetPort: 8501

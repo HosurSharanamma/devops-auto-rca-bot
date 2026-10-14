@@ -19,12 +19,11 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import requests
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from models.schemas import ErrorResponse, HealthResponse, RCAResponse, RetrievedIncident
-from rag.rca_generation import LM_STUDIO_BASE_URL, generate_rca
+from rag.rca_generation import check_llm_reachable, generate_rca
 from rag.retrieval import retrieve_similar_incidents
 from rag.vector_store import is_ready
 from utils.log_cleaning import LogValidationError, validate_log_input
@@ -36,20 +35,12 @@ app = FastAPI(
 )
 
 
-def _check_llm_reachable() -> bool:
-    try:
-        resp = requests.get(f"{LM_STUDIO_BASE_URL}/models", timeout=3)
-        return resp.status_code == 200
-    except requests.exceptions.RequestException:
-        return False
-
-
 @app.get("/health", response_model=HealthResponse)
 def health():
     return HealthResponse(
         status="ok",
         vector_store_ready=is_ready(),
-        llm_reachable=_check_llm_reachable(),
+        llm_reachable=check_llm_reachable(),
     )
 
 
