@@ -1,15 +1,12 @@
-# Reads outputs from terraform-base/ (the state that is NOT destroyed
-# between sessions) -- specifically the GitHub Actions role ARN, so this
-# cluster can grant it access, and the ECR URLs, purely for convenience so
-# `terraform output` still works the same way from this directory.
-#
-# This assumes terraform-base/ sits next to this terraform/ directory, i.e.
-#   repo-root/terraform/        <- this directory
-#   repo-root/terraform-base/   <- applied once, left standing
-# Adjust the path below if your layout differs.
+# Reads outputs from terraform-base/ (the stack that is NOT destroyed
+# between sessions) -- the GitHub Actions role ARN, so this cluster can
+# grant it access. Day 5: reads from S3 instead of a relative file path, so
+# this no longer depends on both folders sitting side by side on one laptop.
 data "terraform_remote_state" "base" {
-  backend = "local"
+  backend = "s3"
   config = {
-    path = "${path.module}/../terraform-base/terraform.tfstate"
+    bucket = "auto-rca-bot-tfstate-533267099143"
+    key    = "base/terraform.tfstate"
+    region = "eu-central-1"
   }
 }

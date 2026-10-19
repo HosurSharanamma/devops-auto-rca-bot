@@ -19,6 +19,7 @@ on:
       - "utils/**"
       - "docker/**"
       - "requirements.txt"
+      - "tests/**"
       - ".github/workflows/ci.yml"
   workflow_dispatch: {}
 
@@ -38,7 +39,27 @@ env:
   AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
 
 jobs:
+  # Day 5: quality gate. Images are only built if the guardrail tests pass.
+  # These tests need no model, ChromaDB or LLM -- only pytest -- so this job
+  # takes seconds and costs nothing.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run unit tests
+        run: |
+          pip install pytest
+          python -m pytest tests -v
+
   build-and-push:
+    needs: test # do not build or push if tests fail
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

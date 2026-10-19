@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.9.0"
+  required_version = ">= 1.10.0"
 
   required_providers {
     aws = {
@@ -8,9 +8,13 @@ terraform {
     }
   }
 
-  # Local state for now, deliberately. S3 remote state is a planned later
-  # step (not Day 2) -- introducing it is itself worth doing as a separate,
-  # understood step rather than bundling it in here.
-  #
-  # backend "s3" {}
+  # Day 5: remote state in S3 (bucket created by terraform-base/).
+  # Same bucket, different key, so the two stacks never overwrite each other.
+  backend "s3" {
+    bucket       = "auto-rca-bot-tfstate-533267099143"
+    key          = "eks/terraform.tfstate"
+    region       = "eu-central-1"
+    encrypt      = true
+    use_lockfile = true
+  }
 }

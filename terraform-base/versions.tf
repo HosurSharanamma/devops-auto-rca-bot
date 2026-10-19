@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.9.0"
+  required_version = ">= 1.10.0"
 
   required_providers {
     aws = {
@@ -12,7 +12,19 @@ terraform {
     }
   }
 
-  # Local state, same as the main terraform/ directory. This state is NOT
-  # destroyed between sessions (see README) -- it holds the things that cost
-  # nothing to leave running: ECR repos and an IAM role.
+  # Day 5: state moved from local disk to S3. This state is NOT destroyed
+  # between sessions -- it holds the cheap, long-lived things: ECR repos,
+  # the GitHub OIDC role, and the state bucket itself.
+  #
+  # Backend blocks cannot use variables, so the bucket name is hardcoded.
+  # use_lockfile = S3-native state locking (Terraform >= 1.10), so two
+  # applies (e.g. laptop + CI) can't corrupt state at the same time --
+  # no DynamoDB table needed any more.
+  backend "s3" {
+   bucket       = "auto-rca-bot-tfstate-533267099143"
+    key          = "base/terraform.tfstate"
+    region       = "eu-central-1"
+    encrypt      = true
+    use_lockfile = true
+  }
 }
