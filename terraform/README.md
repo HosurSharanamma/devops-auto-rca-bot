@@ -18,7 +18,7 @@ Deliberate defaults (all changeable in `variables.tf`):
 
 ## Cost while this is running
 
-Roughly **$0.20/hour** all-in while up (EKS control plane ~$0.10/hr + 1
+Roughly **$0.20/hour** (on a Kubernetes version in **standard** support -- see Day 6 note below) all-in while up (EKS control plane ~$0.10/hr + 1
 t3.medium ~$0.0416/hr + NAT gateway ~$0.045/hr + small data charges).
 **Left running by accident for a month, this is closer to $140.** This is
 exactly why the rule is: `apply` when you start working, `destroy` when
@@ -97,3 +97,17 @@ persist between sessions.
 - Why state is local for now and what moving to S3 + DynamoDB locking
   would change (team collaboration, state locking, avoiding "terraform
   apply from two laptops at once")
+
+## Day 6 note — Kubernetes version and the hidden 6x control-plane cost
+
+EKS charges **$0.10/hour** per cluster for a Kubernetes version in standard
+support, and **$0.60/hour** once that version moves to extended support.
+1.31 left standard support on 26 Nov 2025, so every session run on 1.31
+paid the extended rate (~$0.70/hour all-in, not ~$0.20). Day 6 moves to
+**1.35** (standard support until 27 Mar 2027). Because the cluster is
+destroyed after every session, this is a fresh create at 1.35, not an
+in-place upgrade. 1.33+ also needs `ami_type = "AL2023_x86_64_STANDARD"`
+on the node group (no Amazon Linux 2 images exist for 1.33+).
+
+Habit worth keeping: check the EKS version calendar before choosing a
+version; the cost is applied automatically with no warning at apply time.

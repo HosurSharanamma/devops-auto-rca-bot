@@ -38,7 +38,7 @@ jobs:
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
         with:
-          version: "v1.31.0"
+          version: "v1.35.0" # match the cluster version (terraform/variables.tf)
 
       - name: Point kubectl at the cluster
         run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
@@ -47,20 +47,54 @@ jobs:
         id: ecr
         run: echo "registry=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy the chosen tag
+      # Day 6: closes the Day 4 gap "CD fails on a fresh cluster until
+      # someone creates the secret by hand". The Groq key lives in GitHub
+      # (Settings -> Secrets and variables -> Actions -> Secrets ->
+      # LLM_API_KEY), is masked in logs, and is written to Kubernetes with
+      # apply (create-or-update), so re-runs and key rotation both work.
+      - name: Create namespace and LLM secret
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
         run: |
-          kubectl set image deployment/auto-rca-bot-api \
-            api=${{ steps.ecr.outputs.registry }}/auto-rca-bot-api:${{ inputs.image_tag }} \
-            -n auto-rca-bot
+          if [ -z "$LLM_API_KEY" ]; then
+            echo "::error::GitHub secret LLM_API_KEY is empty or not set."
+            exit 1
+          fi
+          kubectl apply -f k8s/00-namespace.yaml
+          kubectl create secret generic auto-rca-bot-secrets \
+            --from-literal=LLM_API_KEY="$LLM_API_KEY" \
+            -n auto-rca-bot --dry-run=client -o yaml | kubectl apply -f -
 
-          kubectl set image deployment/auto-rca-bot-ui \
-            ui=${{ steps.ecr.outputs.registry }}/auto-rca-bot-ui:${{ inputs.image_tag }} \
-            -n auto-rca-bot
+      # Day 6: apply ALL manifests (not just `set image`), so config changes
+      # and new components like Prometheus are deployed by the pipeline too.
+      # The manifests say ":latest"; we swap in the chosen tag before
+      # applying, so one apply = one rollout of exactly that image.
+      - name: Apply manifests with the chosen tag
+        run: |
+          mkdir -p rendered
+          for f in k8s/*.yaml; do
+            sed "s#:latest#:${{ inputs.image_tag }}#g" "$f" > "rendered/$(basename "$f")"
+          done
+          grep -h "image:" rendered/*.yaml
+          kubectl apply -f rendered/
 
       - name: Wait for rollout to finish
         run: |
-          kubectl rollout status deployment/auto-rca-bot-api -n auto-rca-bot --timeout=180s
+          kubectl rollout status deployment/auto-rca-bot-api -n auto-rca-bot --timeout=240s
           kubectl rollout status deployment/auto-rca-bot-ui -n auto-rca-bot --timeout=180s
+          kubectl rollout status deployment/prometheus -n auto-rca-bot --timeout=120s
+
+      # Day 6: "rollout finished" only means pods passed their probes. This
+      # checks the things a user and Prometheus actually depend on.
+      - name: Smoke test
+        run: |
+          kubectl port-forward svc/auto-rca-bot-api 8000:8000 -n auto-rca-bot >/tmp/pf.log 2>&1 &
+          sleep 5
+          curl -sf http://localhost:8000/health
+          echo
+          curl -sf http://localhost:8000/metrics | grep -q "rca_request_duration_seconds" \
+            || { echo "::error::/metrics does not expose rca_request_duration_seconds"; exit 1; }
+          echo "API health and /metrics OK"
 
       - name: Summary
         run: |

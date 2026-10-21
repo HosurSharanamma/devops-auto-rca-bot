@@ -156,3 +156,53 @@ configmap, secret) in one command, cluster stays up.
   real pipeline you'd deploy by immutable tag (a git SHA or build number)
   so you always know exactly which code is running. This is exactly what
   Day 4's CI/CD pipeline will introduce.
+
+---
+
+# Day 6 — Observability: Prometheus metrics for the RCA bot
+
+## What this adds
+
+| File | What | Why |
+|---|---|---|
+| `api/metrics.py` | 2 metrics: `rca_request_duration_seconds` (histogram), `rca_requests_total` (counter) | Latency a user feels; error and low-confidence rates. LLM failures still return HTTP 200 with a fallback answer, so status codes alone hide them. |
+| `api/main.py` | `GET /metrics` + one `record_rca()` call per request | What Prometheus scrapes. |
+| `02-api-deployment.yaml` | `prometheus.io/*` pod annotations | Prometheus finds pods by annotation, not a fixed address. |
+| `06-prometheus.yaml` | ServiceAccount, Role, RoleBinding, ConfigMap (config + rules), Deployment, Service | One small Prometheus (~192Mi) that fits the single t3.medium. Namespaced Role = least privilege. |
+| `tests/test_metrics.py` | 4 tests | Same CI gate as Day 5. |
+| CD workflow | Creates namespace + secret from GitHub secret `LLM_API_KEY`, applies all manifests with the chosen tag, smoke-tests `/health` and `/metrics` | Fresh cluster → running app in one click. `set image` alone could never deploy Prometheus or config changes. |
+| CI workflow | `:latest` pushed only from `main` | Branch runs can't overwrite main's image. |
+
+## Run it
+
+```bash
+# 1. Cluster up (now 1.35 -- see terraform/README.md Day 6 note)
+cd terraform && terraform plan   # read it: expect cluster_version 1.35 and ami_type AL2023
+terraform apply
+aws eks update-kubeconfig --region eu-central-1 --name auto-rca-bot
+
+# 2. One time only: GitHub repo -> Settings -> Secrets and variables -> Actions
+#    -> Secrets tab -> New repository secret: LLM_API_KEY = your Groq key.
+#    CD now creates the namespace + Kubernetes secret itself, so a fresh
+#    cluster needs NO manual kubectl steps.
+
+# 3. Push to main -> CI runs tests, builds, pushes images tagged with the SHA
+# 4. Actions tab -> "CD - deploy to EKS" -> image_tag = that SHA
+```
+
+## Prove it works
+
+```bash
+kubectl port-forward svc/auto-rca-bot-ui 8501:8501 -n auto-rca-bot      # terminal 1
+kubectl port-forward svc/prometheus 9090:9090 -n auto-rca-bot           # terminal 2
+```
+
+1. Run 5–10 RCAs from the UI (http://localhost:8501), including one empty input.
+2. http://localhost:9090/targets — `auto-rca-bot-pods` must show **UP**.
+3. Queries (Graph tab), after ~1 minute:
+   - `rca_requests_total` — counts by outcome
+   - `rca:latency_seconds:p95_5m` — p95 latency in seconds
+   - `rca:low_confidence_ratio:5m` — share of answers flagged low confidence
+4. Screenshot the targets page and the p95 graph for your README / interview.
+
+Then: `terraform destroy`.

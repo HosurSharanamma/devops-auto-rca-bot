@@ -14,6 +14,13 @@ spec:
     metadata:
       labels:
         app: auto-rca-bot-api
+      # Day 6: Prometheus (06-prometheus.yaml) finds pods to scrape by these
+      # annotations, not by a hard-coded address -- so if replicas go from 1
+      # to 3, all 3 pods get scraped automatically.
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: api

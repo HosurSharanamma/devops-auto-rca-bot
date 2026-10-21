@@ -1,0 +1,195 @@
+# Day 6: one small Prometheus server inside the cluster.
+#
+# Why plain Prometheus and not the full kube-prometheus-stack Helm chart:
+# the full stack (operator + Grafana + alertmanager + node-exporter +
+# kube-state-metrics) wants well over 1 GiB of RAM. We have ONE t3.medium
+# (4 GiB) already running the API (up to 900Mi) and the UI. A single
+# Prometheus pod at ~256Mi fits; the full stack would push pods into
+# Pending. Grafana is deliberately left out -- the Prometheus UI is enough
+# to show and query one metric, and Grafana is already on the CV from LTTS.
+#
+# How Prometheus finds the API: Kubernetes service discovery (role: pod),
+# limited to this namespace, keeping only pods annotated
+# prometheus.io/scrape="true" (see 02-api-deployment.yaml). That needs
+# permission to list pods -> ServiceAccount + Role + RoleBinding below.
+# A namespaced Role, not a ClusterRole: Prometheus can only see pods in
+# auto-rca-bot, nothing else in the cluster (least privilege).
+#
+# Storage is emptyDir: metrics are lost when the pod restarts or the cluster
+# is destroyed. Correct for a cluster that lives for one session; a real
+# setup would use a PersistentVolume or remote storage (e.g. Amazon Managed
+# Service for Prometheus).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: auto-rca-bot
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus-pod-reader
+  namespace: auto-rca-bot
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus-pod-reader
+  namespace: auto-rca-bot
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: auto-rca-bot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: prometheus-pod-reader
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: auto-rca-bot
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - /etc/prometheus/rules.yml
+
+    scrape_configs:
+      - job_name: auto-rca-bot-pods
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [auto-rca-bot]
+        relabel_configs:
+          # Keep only pods that opted in.
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          # Use the annotated path (default /metrics).
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          # Use the annotated port instead of guessing.
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          # Readable labels on every series.
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+
+  # Pre-computed answers to the questions we actually ask. Recording rules
+  # make the queries short in the UI and are what an alert would use.
+  rules.yml: |
+    groups:
+      - name: auto-rca-bot
+        rules:
+          - record: rca:latency_seconds:p95_5m
+            expr: histogram_quantile(0.95, sum by (le) (rate(rca_request_duration_seconds_bucket[5m])))
+          - record: rca:low_confidence_ratio:5m
+            expr: |
+              sum(rate(rca_requests_total{outcome="success",low_confidence="true"}[5m]))
+              /
+              sum(rate(rca_requests_total{outcome="success"}[5m]))
+          - record: rca:error_ratio:5m
+            expr: |
+              sum(rate(rca_requests_total{outcome="llm_error"}[5m]))
+              /
+              sum(rate(rca_requests_total{outcome!="invalid_input"}[5m]))
+          # One example alert. There is no Alertmanager here, so it only
+          # shows as "firing" on the Prometheus Alerts page -- nobody gets
+          # paged. Wiring Alertmanager to email/Slack is the next step in a
+          # real setup.
+          - alert: RcaSlowP95
+            expr: rca:latency_seconds:p95_5m > 15
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "p95 RCA latency above 15s for 5 minutes"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: auto-rca-bot
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          # Pinned version, never :latest -- same lesson as our own images.
+          image: prom/prometheus:v3.5.0
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=1d
+          ports:
+            - containerPort: 9090
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "192Mi"
+            limits:
+              cpu: "250m"
+              memory: "384Mi"
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          emptyDir: {}
+---
+# ClusterIP: reached with `kubectl port-forward svc/prometheus 9090:9090`,
+# same no-extra-cost approach as the UI.
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: auto-rca-bot
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090

@@ -55,7 +55,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          pip install pytest
+          pip install pytest prometheus-client
           python -m pytest tests -v
 
   build-and-push:
@@ -79,17 +79,29 @@ jobs:
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
-          docker build -f docker/api.Dockerfile -t "$REGISTRY/auto-rca-bot-api:${{ github.sha }}" -t "$REGISTRY/auto-rca-bot-api:latest" .
+          docker build -f docker/api.Dockerfile -t "$REGISTRY/auto-rca-bot-api:${{ github.sha }}" .
           docker push "$REGISTRY/auto-rca-bot-api:${{ github.sha }}"
-          docker push "$REGISTRY/auto-rca-bot-api:latest"
+          # Day 6: only main may move :latest. A manual run on another
+          # branch still gets its SHA-tagged image, but cannot overwrite
+          # main's :latest (gap logged on Day 5).
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag "$REGISTRY/auto-rca-bot-api:${{ github.sha }}" "$REGISTRY/auto-rca-bot-api:latest"
+            docker push "$REGISTRY/auto-rca-bot-api:latest"
+          fi
 
       - name: Build and push UI image
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
-          docker build -f docker/ui.Dockerfile -t "$REGISTRY/auto-rca-bot-ui:${{ github.sha }}" -t "$REGISTRY/auto-rca-bot-ui:latest" .
+          docker build -f docker/ui.Dockerfile -t "$REGISTRY/auto-rca-bot-ui:${{ github.sha }}" .
           docker push "$REGISTRY/auto-rca-bot-ui:${{ github.sha }}"
-          docker push "$REGISTRY/auto-rca-bot-ui:latest"
+          # Day 6: only main may move :latest. A manual run on another
+          # branch still gets its SHA-tagged image, but cannot overwrite
+          # main's :latest (gap logged on Day 5).
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag "$REGISTRY/auto-rca-bot-ui:${{ github.sha }}" "$REGISTRY/auto-rca-bot-ui:latest"
+            docker push "$REGISTRY/auto-rca-bot-ui:latest"
+          fi
 
       - name: Summary
         run: |

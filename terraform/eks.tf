@@ -28,6 +28,12 @@ module "eks" {
     default = {
       instance_types = [var.node_instance_type]
 
+      # Day 6: required once cluster_version is 1.33+. EKS no longer ships
+      # Amazon Linux 2 node images for 1.33 and newer, and this module's
+      # default is still AL2 -- without this line the node group fails to
+      # create. AL2023 is the supported replacement.
+      ami_type = "AL2023_x86_64_STANDARD"
+
       min_size     = var.node_min_size
       max_size     = var.node_max_size
       desired_size = var.node_desired_size
