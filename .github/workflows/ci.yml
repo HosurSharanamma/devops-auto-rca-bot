@@ -55,7 +55,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          pip install pytest prometheus-client
+          pip install pytest prometheus-client requests "tenacity>=8.1.0,<9"
           python -m pytest tests -v
 
   build-and-push:

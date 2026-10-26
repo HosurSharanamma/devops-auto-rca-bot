@@ -5,12 +5,18 @@ generate RCA and fix recommendation"""
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass, field
 
 import requests
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+
+# Day 7: every LLM failure is now written to the pod log (kubectl logs), not
+# only returned to the caller. On Day 6 the metric showed THAT calls failed,
+# but nothing recorded WHY.
+logger = logging.getLogger("rca.generation")
 
 # LM_STUDIO_BASE_URL / LM_STUDIO_MODEL are kept as-is for local dev (LM Studio,
 # no auth needed). For cloud deployment, point these at any OpenAI-compatible
@@ -64,10 +70,30 @@ class RCAGenerationResult:
     used_fallback: bool
     latency_ms: float
     error: str | None = field(default=None)
+    # Day 7: None = success, "rate_limited" = provider quota (HTTP 429),
+    # "llm_error" = anything else. Lets metrics separate "Groq said slow
+    # down" from "something is broken".
+    error_type: str | None = field(default=None)
 
 
 class LLMCallError(Exception):
     pass
+
+
+class RateLimitedError(LLMCallError):
+    """HTTP 429 from the LLM provider. Not retried: Groq's free-tier limit is
+    per MINUTE (output tokens/min), so retrying 1-8 seconds later just burns
+    more quota and makes the user wait longer for the same failure."""
+
+    def __init__(self, message: str, retry_after: str | None):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+def _should_retry(exc: BaseException) -> bool:
+    if isinstance(exc, RateLimitedError):
+        return False
+    return isinstance(exc, (requests.exceptions.RequestException, LLMCallError))
 
 
 def _build_prompt(cleaned_log_text: str, incidents: list[dict]) -> str:
@@ -95,7 +121,7 @@ def _build_prompt(cleaned_log_text: str, incidents: list[dict]) -> str:
     reraise=True,
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=8),
-    retry=retry_if_exception_type((requests.exceptions.RequestException, LLMCallError)),
+    retry=retry_if_exception(_should_retry),
 )
 def _call_llm(prompt: str) -> str:
     response = requests.post(
@@ -111,6 +137,12 @@ def _call_llm(prompt: str) -> str:
         },
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
+    if response.status_code == 429:
+        retry_after = response.headers.get("retry-after")
+        raise RateLimitedError(
+            f"LLM provider rate limit (HTTP 429), retry after {retry_after or 'unknown'}s: {response.text[:200]}",
+            retry_after=retry_after,
+        )
     if response.status_code != 200:
         raise LLMCallError(f"LLM endpoint returned status {response.status_code}: {response.text[:200]}")
 
@@ -140,7 +172,22 @@ def generate_rca(cleaned_log_text: str, incidents: list[dict], retrieval_failed:
 
         root_cause = str(parsed.get("root_cause", "")).strip()
         fix_recommendation = str(parsed.get("fix_recommendation", "")).strip()
-        confidence = float(parsed.get("confidence", 0.0))
+
+        # Day 7: a missing or non-numeric confidence used to become 0.0
+        # silently -- indistinguishable from "the model is sure it doesn't
+        # know". Still treated as 0.0 (safe: it gets the low-confidence
+        # flag), but now logged with the raw answer so we can see which
+        # case it was.
+        raw_confidence = parsed.get("confidence")
+        try:
+            confidence = float(raw_confidence)
+        except (TypeError, ValueError):
+            logger.warning(
+                "confidence missing or not a number (got %r); using 0.0. raw answer: %.300s",
+                raw_confidence,
+                raw_content,
+            )
+            confidence = 0.0
         confidence = min(max(confidence, 0.0), 1.0)
 
         if not root_cause or not fix_recommendation:
@@ -161,6 +208,8 @@ def generate_rca(cleaned_log_text: str, incidents: list[dict], retrieval_failed:
     except (requests.exceptions.RequestException, LLMCallError, json.JSONDecodeError, ValueError) as exc:
         # API Failures / malformed output -> structured error, never a raw traceback to the caller.
         latency_ms = (time.perf_counter() - start) * 1000
+        error_type = "rate_limited" if isinstance(exc, RateLimitedError) else "llm_error"
+        logger.warning("llm call failed: type=%s latency_ms=%.0f error=%s", error_type, latency_ms, exc)
         return RCAGenerationResult(
             root_cause="Unable to determine root cause automatically.",
             fix_recommendation="Please retry, or escalate to an on-call engineer with the raw log attached.",
@@ -169,4 +218,5 @@ def generate_rca(cleaned_log_text: str, incidents: list[dict], retrieval_failed:
             used_fallback=True,
             latency_ms=round(latency_ms, 2),
             error=f"llm_call_failed: {exc}",
+            error_type=error_type,
         )

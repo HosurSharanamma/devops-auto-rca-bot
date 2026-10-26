@@ -14,6 +14,7 @@ Run:
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import time
@@ -24,7 +25,11 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-from api.metrics import record_rca
+# Day 7: without this, our WARNING lines may not reach `kubectl logs`
+# in a consistent format. Container logs = stdout/stderr.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+
+from api.metrics import record_rca  # noqa: E402
 from models.schemas import ErrorResponse, HealthResponse, RCAResponse, RetrievedIncident
 from rag.rca_generation import check_llm_reachable, generate_rca
 from rag.retrieval import retrieve_similar_incidents
@@ -102,7 +107,7 @@ def rca(request: dict):
         error=generation.error,
     )
     record_rca(
-        "llm_error" if generation.error else "success",
+        generation.error_type or "success",
         time.perf_counter() - start,
         low_confidence=generation.low_confidence_flag,
     )

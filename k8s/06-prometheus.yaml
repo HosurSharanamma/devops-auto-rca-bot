@@ -109,6 +109,14 @@ data:
               sum(rate(rca_requests_total{outcome="llm_error"}[5m]))
               /
               sum(rate(rca_requests_total{outcome!="invalid_input"}[5m]))
+          # Day 7: provider quota hits (Groq HTTP 429), kept apart from real
+          # errors. Rising rate_limited = capacity problem (buy quota / queue
+          # requests), rising llm_error = something is broken.
+          - record: rca:rate_limited_ratio:5m
+            expr: |
+              sum(rate(rca_requests_total{outcome="rate_limited"}[5m]))
+              /
+              sum(rate(rca_requests_total{outcome!="invalid_input"}[5m]))
           # One example alert. There is no Alertmanager here, so it only
           # shows as "firing" on the Prometheus Alerts page -- nobody gets
           # paged. Wiring Alertmanager to email/Slack is the next step in a

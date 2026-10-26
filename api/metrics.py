@@ -19,6 +19,10 @@ What we measure, and why these and nothing else:
 
 outcome values:
   success      -> LLM answered and the JSON parsed
+  rate_limited -> LLM provider returned HTTP 429 (quota). Day 7: split out
+                  from llm_error after Day 6 showed Groq's free tier caps us
+                  at ~1000 output tokens/min (~10 RCAs/min). Not our bug,
+                  so it must not look like one on the dashboard.
   llm_error    -> LLM call failed or returned garbage; the API still sent
                   HTTP 200 with a fallback answer, which is exactly why we
                   need a metric -- the status code alone hides this failure
