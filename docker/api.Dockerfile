@@ -34,7 +34,8 @@ COPY data/ ./data/
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
+# Day 8: /livez, not /health (which calls the external LLM).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/livez || exit 1
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -55,3 +55,20 @@ def record_rca(outcome: str, duration_seconds: float, low_confidence: bool) -> N
     """Record one /rca request. Called once per request from api/main.py."""
     RCA_LATENCY.labels(outcome=outcome).observe(duration_seconds)
     RCA_REQUESTS.labels(outcome=outcome, low_confidence=str(low_confidence).lower()).inc()
+
+
+# Day 8: Groq's free tier caps OUTPUT tokens per minute (Day 6: 1000/min).
+# This counter lets Prometheus show how close we are to that cap BEFORE the
+# 429s start (rule rca:llm_completion_tokens_per_minute:5m).
+LLM_TOKENS = Counter(
+    "rca_llm_tokens_total",
+    "Tokens reported by the LLM provider, by kind (prompt or completion).",
+    labelnames=("kind",),
+)
+
+
+def record_llm_tokens(prompt_tokens: int, completion_tokens: int) -> None:
+    if prompt_tokens:
+        LLM_TOKENS.labels(kind="prompt").inc(prompt_tokens)
+    if completion_tokens:
+        LLM_TOKENS.labels(kind="completion").inc(completion_tokens)

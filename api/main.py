@@ -4,7 +4,10 @@ api/main.py
 FastAPI backend for the Auto-RCA Bot.
 
 Endpoints:
-  GET  /health  -> liveness + readiness of vector store and LLM
+  GET  /livez   -> Day 8: process is alive (no dependencies). Liveness probe.
+  GET  /readyz  -> Day 8: 200 only after start-up warm-up succeeded. Readiness probe.
+  GET  /health  -> vector store + LLM status, for humans and the UI.
+                   NOT used by probes any more: it calls Groq.
   POST /rca     -> full RAG pipeline: validate -> clean -> mask PII ->
                     retrieve similar incidents -> generate grounded RCA
 
@@ -21,6 +24,8 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -29,14 +34,38 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 # in a consistent format. Container logs = stdout/stderr.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
-from api.metrics import record_rca  # noqa: E402
+from api.metrics import record_llm_tokens, record_rca  # noqa: E402
+from api.warmup import Warmup  # noqa: E402
 from models.schemas import ErrorResponse, HealthResponse, RCAResponse, RetrievedIncident
 from rag.rca_generation import check_llm_reachable, generate_rca
 from rag.retrieval import retrieve_similar_incidents
-from rag.vector_store import is_ready
+from rag.vector_store import is_ready, query_similar
 from utils.log_cleaning import LogValidationError, validate_log_input
 
+warmup = Warmup()
+
+
+def _warmup_steps():
+    from rag.embeddings import get_embedding_model
+
+    return [
+        ("vector_store", is_ready),  # False if the store is empty
+        ("embedding_model", get_embedding_model),
+        ("retrieval", lambda: query_similar("warm-up: build failed", top_k=1)),
+    ]
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Background thread: the server starts answering /livez at once, so the
+    # liveness probe never kills a pod that is just loading the model.
+    if os.environ.get("WARMUP_ON_STARTUP", "true").lower() == "true":
+        warmup.start_in_background(_warmup_steps())
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Auto-RCA Bot API",
     description="GenAI-powered Root Cause Analysis for Jenkins CI/CD failures.",
     version="1.0.0",
@@ -49,6 +78,27 @@ def metrics():
     and rca_requests_total (see api/metrics.py), plus default Python process
     metrics (memory, CPU) for free."""
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@app.get("/livez", include_in_schema=False)
+def livez():
+    """Day 8: liveness. Answers if the process can serve HTTP at all. Calls
+    nothing external: before Day 8 the liveness probe hit /health, which
+    calls Groq, so a slow Groq could get a healthy pod restarted -- and a
+    restart cannot fix Groq."""
+    return {"status": "alive"}
+
+
+@app.get("/readyz", include_in_schema=False)
+def readyz():
+    """Day 8: readiness. 503 until warm-up (model loaded + one retrieval)
+    has succeeded, so no user request pays the 17 s cold start. Does not
+    call the LLM: Groq being down should not take every pod out of the
+    Service -- the API already answers with a fallback in that case."""
+    body = {"status": warmup.state, "warmup_seconds": warmup.seconds}
+    if warmup.detail:
+        body["detail"] = warmup.detail
+    return JSONResponse(status_code=200 if warmup.ready else 503, content=body)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -106,6 +156,7 @@ def rca(request: dict):
         latency_ms=generation.latency_ms,
         error=generation.error,
     )
+    record_llm_tokens(generation.prompt_tokens, generation.completion_tokens)
     record_rca(
         generation.error_type or "success",
         time.perf_counter() - start,

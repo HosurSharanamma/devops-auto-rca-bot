@@ -13,13 +13,17 @@ Collection schema per document:
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from typing import Any
 
 CHROMA_PERSIST_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "chroma_store")
 COLLECTION_NAME = "jenkins_incidents"
 
 
+@lru_cache(maxsize=1)
 def get_client():
+    """Day 8: cached. Before, every /rca and every /health opened a new
+    PersistentClient on disk."""
     import chromadb
 
     os.makedirs(CHROMA_PERSIST_DIR, exist_ok=True)

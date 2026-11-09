@@ -14,3 +14,11 @@ data:
   # Internal cluster DNS name for the API service (see 03-api-service.yaml).
   # Same-namespace pods can reach it by this short name alone.
   RCA_API_BASE_URL: "http://auto-rca-bot-api:8000"
+  # Day 8: LLM call settings (see rag/rca_generation.py). If Groq rejects
+  # one of these for the current model (HTTP 400 in `kubectl logs`), set it
+  # to "" and re-apply -- the code then leaves the field out of the request.
+  LLM_TIMEOUT_SECONDS: "30"
+  LLM_MAX_TOKENS: "400"
+  LLM_JSON_MODE: "true"
+  LLM_REASONING_EFFORT: "none"
+  LLM_REASONING_FORMAT: "hidden"

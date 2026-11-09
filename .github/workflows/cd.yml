@@ -93,11 +93,15 @@ jobs:
         run: |
           kubectl port-forward svc/auto-rca-bot-api 8000:8000 -n auto-rca-bot >/tmp/pf.log 2>&1 &
           sleep 5
+          # Day 8: /readyz = warm-up done (model loaded, one retrieval OK).
+          curl -sf http://localhost:8000/readyz \
+            || { echo "::error::/readyz not 200 - warm-up did not finish"; exit 1; }
+          echo
           curl -sf http://localhost:8000/health
           echo
           curl -sf http://localhost:8000/metrics | grep -q "rca_request_duration_seconds" \
             || { echo "::error::/metrics does not expose rca_request_duration_seconds"; exit 1; }
-          echo "API health and /metrics OK"
+          echo "API readyz, health and /metrics OK"
 
       - name: Summary
         run: |
