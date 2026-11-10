@@ -13,3 +13,5 @@ api-logs.txt
 *.tfstate
 *.tfstate.backup
 .terraform/
+.coverage
+test-results/

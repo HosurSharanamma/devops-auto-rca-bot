@@ -7,15 +7,15 @@ prometheus-client + requests + tenacity, no torch / ChromaDB / LLM.
 """
 
 import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ["WARMUP_ON_STARTUP"] = "false"  # tests drive the warm-up themselves
 
+import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 import api.main as main  # noqa: E402
 from api.warmup import FAILED, READY, WARMING, Warmup  # noqa: E402
+
+pytestmark = pytest.mark.api
 
 
 def client_with(warmup):
@@ -78,6 +78,7 @@ def test_probes_never_call_the_llm(monkeypatch):
     assert c.get("/readyz").status_code == 200
 
 
+@pytest.mark.metrics
 def test_tokens_metric_counts_prompt_and_completion():
     from prometheus_client import REGISTRY
     from api.metrics import record_llm_tokens

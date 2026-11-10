@@ -1,43 +1,34 @@
 """
 tests/test_pii_to_llm.py
 
-Proves the log text sent to the external LLM is PII-masked.
-Before this fix only the vector-store query was masked; the raw log
-(emails, IPs, tokens) went to Groq. requests.post is faked: no network.
+Proves the log text sent to the external LLM is masked. Before the 9 Nov fix
+only the vector-store query was masked; the raw log went to Groq.
 """
 
-import os
-import sys
+import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from conftest import ok
 
-import rag.rca_generation as gen  # noqa: E402
+pytestmark = [pytest.mark.pii, pytest.mark.llm]
 
-
-class FakeResponse:
-    status_code = 200
-    headers = {}
-    text = ""
-
-    def json(self):
-        return {"choices": [{"message": {"content":
-            '{"confidence": 0.9, "root_cause": "x", "fix_recommendation": "y"}'}}]}
+SECRETS = {
+    "email": "dev.user@example.com",
+    "ip": "10.1.2.3",
+    "password": "hunter2",
+    "bearer": "abc.def.ghi",
+}
 
 
-def test_prompt_sent_to_llm_is_masked(monkeypatch):
-    sent = {}
+@pytest.mark.parametrize("kind", SECRETS.keys())
+def test_secret_never_reaches_the_llm(fake_llm, rca, kind):
+    fake_llm["responses"] = [ok()]
+    log = (f"ERROR: auth failed for {SECRETS['email']} from {SECRETS['ip']} "
+           f"password={SECRETS['password']} Authorization: Bearer {SECRETS['bearer']}")
+    rca(log)
+    assert SECRETS[kind] not in str(fake_llm["bodies"][0]), f"{kind} leaked to the LLM"
 
-    def fake_post(url, *args, **kwargs):
-        sent["body"] = str(kwargs.get("json"))
-        return FakeResponse()
 
-    monkeypatch.setattr(gen.requests, "post", fake_post)
-
-    log = ("ERROR: auth failed for dev.user@example.com from 10.1.2.3 "
-           "password=hunter2 Authorization: Bearer abc.def.ghi")
-    gen.generate_rca(log, incidents=[], retrieval_failed=False)
-
-    body = sent["body"]
-    for secret in ("dev.user@example.com", "10.1.2.3", "hunter2", "abc.def.ghi"):
-        assert secret not in body, f"{secret} leaked to the LLM"
-    assert "<EMAIL_REDACTED>" in body
+def test_placeholders_are_sent_instead(fake_llm, rca):
+    fake_llm["responses"] = [ok()]
+    rca("contact dev.user@example.com")
+    assert "<EMAIL_REDACTED>" in str(fake_llm["bodies"][0])

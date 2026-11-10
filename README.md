@@ -51,7 +51,7 @@ auto-rca-bot/
 ├── api/                       main.py (FastAPI backend)
 ├── ui/                        streamlit_app.py (demo UI)
 ├── jenkins/                   Jenkinsfile.example (real pipeline integration)
-├── tests/                     test_guardrails.py (offline unit tests)
+├── tests/                     conftest.py + 7 test files (78 offline tests)
 ├── RUBRIC_MAPPING.md
 ├── DEMO_SCRIPT.md
 └── requirements.txt
@@ -126,10 +126,18 @@ streamlit run ui/streamlit_app.py
 ```
 Opens at `http://localhost:8501`.
 
-### 10. Run the offline guardrail tests (no model/LLM required)
+### 10. Run the tests (no model, ChromaDB or LLM required)
 ```bash
-python -m pytest tests/test_guardrails.py -v
+pip install pytest pytest-cov fastapi httpx prometheus-client requests "tenacity>=8.1.0,<9"
+python -m pytest                      # all 78 tests, < 1 s
+python -m pytest -m pii -v            # only secret / PII masking tests
+python -m pytest -m "unit"            # pure-logic tests
+python -m pytest -m api               # through the real FastAPI app
+python -m pytest --cov=api --cov=rag --cov=utils --cov-report=term-missing
 ```
+Markers are defined in `pytest.ini`; shared fakes (fake LLM provider, fake
+HTTP responses) live in `tests/conftest.py`. CI runs the same tests with a
+coverage gate (80%) and uploads JUnit XML + coverage XML as an artifact.
 
 ## Demo flow (for the evaluator)
 See `DEMO_SCRIPT.md` for the full walkthrough. Short version:

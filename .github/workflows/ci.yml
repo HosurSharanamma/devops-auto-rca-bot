@@ -20,6 +20,7 @@ on:
       - "docker/**"
       - "requirements.txt"
       - "tests/**"
+      - "pytest.ini"
       - ".github/workflows/ci.yml"
   workflow_dispatch: {}
 
@@ -53,10 +54,37 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Run unit tests
+      - name: Install test dependencies
+        run: pip install pytest pytest-cov prometheus-client requests "tenacity>=8.1.0,<9" fastapi httpx
+
+      # Day 9: settings come from pytest.ini (markers, strict markers, paths).
+      # --junitxml: machine-readable results for the artifact below.
+      # --cov-fail-under=80: the gate also fails if coverage drops below 80%
+      #   (82% on Day 9; embeddings/vector_store need torch + ChromaDB and are
+      #   only exercised by the live smoke test, not here).
+      - name: Run tests with coverage
         run: |
-          pip install pytest prometheus-client requests "tenacity>=8.1.0,<9" fastapi httpx
-          python -m pytest tests -v
+          python -m pytest -v \
+            --junitxml=test-results/junit.xml \
+            --cov=api --cov=rag --cov=utils \
+            --cov-report=term-missing \
+            --cov-report=xml:test-results/coverage.xml \
+            --cov-fail-under=80
+
+      # Shown on the run's summary page, even when tests fail.
+      - name: Coverage summary
+        if: always()
+        run: |
+          echo "## Test coverage" >> "$GITHUB_STEP_SUMMARY"
+          python -m coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 14
 
   build-and-push:
     needs: test # do not build or push if tests fail
