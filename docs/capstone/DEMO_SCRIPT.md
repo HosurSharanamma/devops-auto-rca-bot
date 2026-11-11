@@ -1,3 +1,5 @@
+> **History note:** this is the original offline course version of the project (local LM Studio, graded capstone). The current version runs on AWS EKS — see the [main README](../../README.md).
+
 # Demo Script
 
 A step-by-step walkthrough for presenting the Auto-RCA Bot to an evaluator.

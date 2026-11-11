@@ -51,3 +51,9 @@ variable "node_desired_size" {
   type        = number
   default     = 1
 }
+
+variable "tfstate_bucket" {
+  description = "S3 bucket holding terraform-base state. Leave null to use <project_name>-tfstate-<current account ID>."
+  type        = string
+  default     = null
+}

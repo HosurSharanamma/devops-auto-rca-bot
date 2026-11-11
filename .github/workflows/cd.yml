@@ -70,14 +70,22 @@ jobs:
 
       # Day 6: apply ALL manifests (not just `set image`), so config changes
       # and new components like Prometheus are deployed by the pipeline too.
-      # The manifests say ":latest"; we swap in the chosen tag before
-      # applying, so one apply = one rollout of exactly that image.
-      - name: Apply manifests with the chosen tag
+      # The manifests say "ECR_REGISTRY/...:latest"; we swap in this
+      # account's registry (looked up above, never committed) and the chosen
+      # tag before applying, so one apply = one rollout of exactly that image.
+      - name: Apply manifests with the chosen registry and tag
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           mkdir -p rendered
           for f in k8s/*.yaml; do
-            sed "s#:latest#:${{ inputs.image_tag }}#g" "$f" > "rendered/$(basename "$f")"
+            sed -e "s#ECR_REGISTRY/#${REGISTRY}/#g" \
+                -e "s#:latest#:${{ inputs.image_tag }}#g" \
+                "$f" > "rendered/$(basename "$f")"
           done
+          if grep -q "image: ECR_REGISTRY/" rendered/*.yaml; then
+            echo "::error::ECR_REGISTRY placeholder was not replaced"; exit 1
+          fi
           grep -h "image:" rendered/*.yaml
           kubectl apply -f rendered/
 

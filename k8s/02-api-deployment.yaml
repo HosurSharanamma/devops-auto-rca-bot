@@ -24,7 +24,9 @@ spec:
     spec:
       containers:
         - name: api
-          image: 533267099143.dkr.ecr.eu-central-1.amazonaws.com/auto-rca-bot-api:latest
+          # ECR_REGISTRY is replaced at deploy time (CD workflow), so no AWS
+          # account ID is committed. See k8s/README.md for the manual command.
+          image: ECR_REGISTRY/auto-rca-bot-api:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

@@ -58,17 +58,22 @@ kubectl get secret auto-rca-bot-secrets -n auto-rca-bot
 
 ## 3. Deploy the app
 
+The Deployment files use the placeholder `ECR_REGISTRY` instead of a real
+AWS account ID, so they can't be applied as-is. The normal path is the
+**CD - deploy to EKS** workflow, which fills it in. To deploy by hand,
+fill it in the same way:
+
 ```bash
-kubectl apply -f k8s/02-api-deployment.yaml
-kubectl apply -f k8s/03-api-service.yaml
-kubectl apply -f k8s/04-ui-deployment.yaml
-kubectl apply -f k8s/05-ui-service.yaml
+# bash
+REGISTRY="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.eu-central-1.amazonaws.com"
+for f in k8s/*.yaml; do sed "s#ECR_REGISTRY/#$REGISTRY/#g" "$f"; echo "---"; done | kubectl apply -f -
 ```
 
-(Or `kubectl apply -f k8s/` to apply everything in the folder at once —
-Kubernetes doesn't care about ordering within one apply for these
-resources, since nothing here has a strict dependency Kubernetes itself
-enforces.)
+```powershell
+# PowerShell
+$REGISTRY = "$(aws sts get-caller-identity --query Account --output text).dkr.ecr.eu-central-1.amazonaws.com"
+Get-ChildItem k8s\*.yaml | ForEach-Object { (Get-Content $_ -Raw) -replace 'ECR_REGISTRY/', "$REGISTRY/"; "---" } | kubectl apply -f -
+```
 
 ## 4. Verify
 
@@ -79,8 +84,8 @@ kubectl get pods -n auto-rca-bot -w
 Watch until both pods show `STATUS=Running` and `READY=1/1`. First pull from
 ECR can take 30–90 seconds since the images aren't cached on the new node.
 
-If a pod sits in `ImagePullBackOff`, your image tags/account ID in the
-Deployment YAML don't match what's actually in ECR — check with
+If a pod sits in `ImagePullBackOff`, the image tag or registry
+that was filled in doesn't match what's actually in ECR — check with
 `aws ecr describe-images --repository-name auto-rca-bot-api --region eu-central-1`
 and confirm the tag matches.
 

@@ -1,3 +1,5 @@
+> **History note:** this is the original offline course version of the project (local LM Studio, graded capstone). The current version runs on AWS EKS — see the [main README](../../README.md).
+
 # Rubric Mapping
 
 How each capstone requirement maps to a concrete artifact in this repo.

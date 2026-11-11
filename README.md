@@ -1,159 +1,183 @@
-# Auto-RCA Bot — DevOps Incident Root Cause Assistant
+# Auto-RCA Bot on AWS EKS
 
-A GenAI-powered Root Cause Analysis (RCA) assistant for Jenkins CI/CD failures.
-It retrieves similar historical incidents (RAG over ChromaDB) and uses a local
-LLM (Mistral, served by LM Studio) to produce a grounded root cause and fix
-recommendation — fully offline, with PII masking and error-handling guardrails
-built in.
+[![CI - build and push images](https://github.com/HosurSharanamma/devops-auto-rca-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/HosurSharanamma/devops-auto-rca-bot/actions/workflows/ci.yml)
 
-See `RUBRIC_MAPPING.md` for exactly how each part of this repo maps to the
-grading rubric, and `DEMO_SCRIPT.md` for a step-by-step walkthrough to present
-to the evaluator.
+An AI assistant for Jenkins build failures, deployed to **AWS EKS** with
+**Terraform**, shipped by **GitHub Actions**, and monitored with **Prometheus**.
+
+You paste a failed Jenkins log. The service cleans it, hides secrets and
+personal data, finds similar past failures (RAG over ChromaDB), and asks an
+LLM for a root cause and a fix grounded in those past cases.
+
+**What this repo shows**
+
+- **Infrastructure as code** — VPC, EKS 1.35, ECR, IAM and the state bucket are all Terraform. Two stacks: a long-lived base and a cluster that is created and destroyed each session.
+- **No stored AWS keys** — GitHub Actions gets AWS access through OIDC, limited to this one repo.
+- **Test gate before build** — 78 tests and an 80% coverage minimum must pass before any image is built or pushed.
+- **Traceable images** — every image is tagged with its commit SHA; only `main` can move `:latest`.
+- **Checked deployments** — CD applies all manifests, waits for rollout, then checks `/readyz`, `/health` and `/metrics`.
+- **Monitoring** — the API exposes Prometheus metrics; Prometheus runs in the cluster and finds pods by annotation.
+- **Cost control** — about $0.20/hour while the cluster is up; it is destroyed after every session.
 
 ## Architecture
 
-```
-Jenkins failure log
-      |
-      v
-[utils/log_cleaning.py]   -> strip ANSI/timestamps, validate (empty/unsupported input)
-      |
-      v
-[utils/pii_masking.py]    -> redact emails, IPs, tokens, keys, secrets
-      |
-      v
-[rag/retrieval.py] -----> [rag/vector_store.py] (ChromaDB) -> top-k similar past incidents
-      |                          ^
-      |                          |
-      |                   [rag/embeddings.py] (MiniLM, optionally fine-tuned)
-      v
-[rag/rca_generation.py]   -> prompt construction (grounded on retrieved incidents)
-      |                       -> call local LLM (Mistral via LM Studio, OpenAI-compatible API)
-      |                       -> retry w/ backoff on API failure, JSON output validation,
-      |                          low-confidence flagging, fallback to LLM-only reasoning
-      v
-  RCA + fix recommendation
-      |
-      +--> [api/main.py] FastAPI (/health, /rca)  <-- used by ui/streamlit_app.py
-      +--> [jenkins/Jenkinsfile.example]  post{failure{...}} -> Slack alert
-```
+```mermaid
+flowchart LR
+    dev["git push to main"] --> ci
 
-### Repo layout
+    subgraph gha["GitHub Actions"]
+        ci["CI: pytest + 80% coverage gate"] --> build["docker build<br/>api + ui"]
+        cd["CD: manual run<br/>with image tag"]
+    end
 
-```
-auto-rca-bot/
-├── data/                      synthetic dataset + generated ChromaDB store + eval report
-├── utils/                     log_cleaning.py, pii_masking.py
-├── rag/                       embeddings.py, vector_store.py, retrieval.py, rca_generation.py
-├── models/                    schemas.py (Pydantic API contracts)
-├── scripts/                   generate_synthetic_data.py, ingest_logs.py, evaluate_retrieval.py
-├── finetune/                  finetune_embeddings.py (domain fine-tuning of the embedding model)
-├── api/                       main.py (FastAPI backend)
-├── ui/                        streamlit_app.py (demo UI)
-├── jenkins/                   Jenkinsfile.example (real pipeline integration)
-├── tests/                     conftest.py + 7 test files (78 offline tests)
-├── RUBRIC_MAPPING.md
-├── DEMO_SCRIPT.md
-└── requirements.txt
+    build -- "push :sha" --> ecr[("Amazon ECR")]
+    gha -. "OIDC, short-lived role<br/>no stored keys" .-> iam["AWS IAM role"]
+
+    subgraph aws["AWS eu-central-1 (Terraform)"]
+        iam
+        ecr
+        s3[("S3 Terraform state<br/>versioned, encrypted, locked")]
+        subgraph vpc["VPC: 2 AZs, private subnets, 1 NAT"]
+            subgraph eks["EKS 1.35, managed node group"]
+                ui["Streamlit UI"] --> api["FastAPI /rca"]
+                prom["Prometheus"] -- "scrape /metrics" --> api
+            end
+        end
+    end
+
+    cd -- "kubectl apply + smoke test" --> eks
+    ecr -- "pull image" --> eks
+    api -- "HTTPS via NAT" --> llm["Groq LLM API"]
 ```
 
-## Setup
+Inside the API, each request goes through: input checks → PII and secret
+masking → retrieval of similar incidents → LLM call (with retries, JSON
+validation and a fallback) → structured answer.
 
-### 1. Prerequisites
-- Python 3.10+
-- [LM Studio](https://lmstudio.ai/) installed locally (for offline Mistral inference)
-- ~4 GB free disk space for the Mistral-7B-Instruct GGUF model + embedding model
+## CI/CD pipeline
 
-### 2. Clone / unzip and create a virtual environment
+```
+push to main
+   │
+   ▼
+CI ── test job ────────────────────────────────┐
+   │   pytest (78 tests, no model/DB/LLM)      │ fails → stop.
+   │   coverage must be ≥ 80%                  │ Nothing is built.
+   │   JUnit + coverage XML uploaded           │
+   ▼                                           ┘
+CI ── build-and-push job
+   │   OIDC → AWS role (no access keys)
+   │   build api + ui images
+   │   push :<commit-sha>  (+ :latest on main only)
+   ▼
+CD ── manual, choose the image tag
+       registry + tag filled into k8s/*.yaml
+       kubectl apply → wait for rollout
+       smoke test: /readyz, /health, /metrics
+```
+
+CD is manual on purpose: the cluster only exists while I am working on it,
+so an automatic deploy would fail most of the time.
+
+**The test gate in action** (CI run on `main`):
+
+![CI test gate: test job must pass before build-and-push runs](docs/images/ci-test-gate.png)
+
+## Repo layout
+
+| Folder | What it holds |
+|---|---|
+| `terraform-base/` | Long-lived stack: S3 state bucket, ECR repos, GitHub OIDC provider and role |
+| `terraform/` | Per-session stack: VPC, EKS cluster, node group, access for the CD role — [README](terraform/README.md) |
+| `k8s/` | Namespace, ConfigMap, API and UI Deployments/Services, Prometheus — [README](k8s/README.md) |
+| `.github/workflows/` | `ci.yml` (test → build → push), `cd.yml` (deploy → smoke test) |
+| `docker/` | Dockerfiles for the API and UI |
+| `api/` | FastAPI app: `/rca`, `/health`, `/readyz`, `/metrics`, startup warm-up |
+| `rag/` | Embeddings, ChromaDB store, retrieval, LLM call and answer checks |
+| `utils/` | Log cleaning, PII and secret masking |
+| `tests/` | 78 offline tests with markers (`unit`, `pii`, `api`, …) |
+| `docs/capstone/` | The original offline course version of this project, kept for history |
+
+## Run it
+
+### On AWS
+
 ```bash
-cd auto-rca-bot
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+# 1. Long-lived base (once). The state bucket name ends in your account ID,
+#    so it is passed at init time instead of being committed.
+cd terraform-base
+terraform init -backend-config="bucket=auto-rca-bot-tfstate-$(aws sts get-caller-identity --query Account --output text)"
+terraform apply
+
+# 2. Cluster (each session)
+cd ../terraform
+terraform init -backend-config="bucket=auto-rca-bot-tfstate-$(aws sts get-caller-identity --query Account --output text)"
+terraform apply                      # ~12–15 min
+
+# 3. Deploy: GitHub → Actions → "CD - deploy to EKS" → Run workflow
+#    Needs repo variable AWS_ROLE_ARN and secret LLM_API_KEY.
+
+# 4. Open the UI
+kubectl port-forward -n auto-rca-bot svc/auto-rca-bot-ui 8501:8501
+
+# 5. Always, at the end of the session
+terraform destroy
 ```
 
-### 3. Start the local LLM (LM Studio)
-1. Open LM Studio → search and download **Mistral-7B-Instruct** (any quantized GGUF build, e.g. Q4_K_M).
-2. Go to the **Local Server** tab → select the Mistral model → click **Start Server**.
-3. Confirm it's running at `http://localhost:1234/v1` (default). If you use a
-   different port/model name, set:
-   ```bash
-   export LM_STUDIO_BASE_URL=http://localhost:1234/v1
-   export LM_STUDIO_MODEL=mistral-7b-instruct
-   ```
+The first-time setup for the bucket (local state first, then migrate) is
+explained in `terraform-base/state-bucket.tf`.
 
-### 4. Generate the synthetic dataset (already included, but reproducible)
+### Locally with Docker
+
 ```bash
-python scripts/generate_synthetic_data.py
-```
-Writes `data/synthetic_jenkins_logs.json` — 40 labelled Jenkins failure logs
-across 10 root-cause categories (OOM kills, flaky tests, dependency
-resolution, config parse errors, network timeouts, credential/auth
-failures, disk space, real regressions, infra provisioning, linting).
-
-### 5. (Optional) Fine-tune the embedding model on the Jenkins domain
-```bash
-python finetune/finetune_embeddings.py
-```
-This fine-tunes `all-MiniLM-L6-v2` using contrastive learning (`MultipleNegativesRankingLoss`)
-on same-category log pairs, and saves the checkpoint to
-`finetune/output/minilm-jenkins-finetuned/`. `rag/embeddings.py` automatically
-detects and uses this checkpoint if present — no other code changes needed.
-Skip this step to use the base model instead (still fully functional).
-
-### 6. Ingest the dataset into ChromaDB
-```bash
-python scripts/ingest_logs.py
+export LLM_API_KEY=<your Groq key>
+docker compose up --build
+# UI: http://localhost:8501   API: http://localhost:8000/health
 ```
 
-### 7. Run retrieval evaluation
-```bash
-python scripts/evaluate_retrieval.py
-```
-Prints and saves `data/evaluation_report.json` with Top-1/Top-3 accuracy,
-average similarity, and average latency. The Streamlit sidebar displays this
-report automatically.
+### Tests only (no model, database or LLM needed)
 
-### 8. Start the backend API
-```bash
-uvicorn api.main:app --reload --port 8000
-```
-Check it's healthy: `curl http://localhost:8000/health`
-
-### 9. Start the demo UI
-```bash
-streamlit run ui/streamlit_app.py
-```
-Opens at `http://localhost:8501`.
-
-### 10. Run the tests (no model, ChromaDB or LLM required)
 ```bash
 pip install pytest pytest-cov fastapi httpx prometheus-client requests "tenacity>=8.1.0,<9"
-python -m pytest                      # all 78 tests, < 1 s
-python -m pytest -m pii -v            # only secret / PII masking tests
-python -m pytest -m "unit"            # pure-logic tests
-python -m pytest -m api               # through the real FastAPI app
+python -m pytest                       # all 78 tests, about 1 second
+python -m pytest -m pii -v             # only secret / PII masking tests
 python -m pytest --cov=api --cov=rag --cov=utils --cov-report=term-missing
 ```
-Markers are defined in `pytest.ini`; shared fakes (fake LLM provider, fake
-HTTP responses) live in `tests/conftest.py`. CI runs the same tests with a
-coverage gate (80%) and uploads JUnit XML + coverage XML as an artifact.
 
-## Demo flow (for the evaluator)
-See `DEMO_SCRIPT.md` for the full walkthrough. Short version:
-1. Show `/health` — vector store + LLM both green.
-2. Paste a sample OOM-kill log in the UI → show retrieved similar incidents,
-   grounded root cause + fix, confidence score, latency.
-3. Paste a log containing a fake email/token → show the PII redaction badge.
-4. Paste gibberish/empty input → show the structured validation error.
-5. Show `data/evaluation_report.json` / sidebar metrics → Top-1/Top-3 accuracy.
-6. Show `finetune/finetune_embeddings.py` and explain the fine-tuning approach.
-7. Show `jenkins/Jenkinsfile.example` → explain real pipeline integration to Slack.
+## Design choices and known limits
 
-## Notes on offline/enterprise readiness
-- No log data or PII ever leaves the local machine: embeddings, vector
-  search, and LLM inference are all local (ChromaDB persistent store +
-  LM Studio local server).
-- PII masking runs before anything is embedded or sent to the LLM.
-- All external-service calls (LLM only) use retry-with-backoff and timeouts;
-  every failure mode produces a structured response, never a raw exception.
+- **NodePort + port-forward, no load balancer.** Saves cost; the app is not public. A real setup would use an Ingress with TLS.
+- **One NAT gateway, not one per AZ.** Cheaper, but one AZ failure cuts internet access for the nodes.
+- **Public EKS API endpoint.** Fine for a personal project; production would limit it to a VPN or fixed IP range.
+- **LLM is an external API (Groq).** Logs are masked before they leave the cluster, but a strict on-prem setup would host the model itself. The code still works with a local OpenAI-compatible server (e.g. LM Studio) by changing `LM_STUDIO_BASE_URL`.
+- **Small dataset.** 40 synthetic Jenkins incidents in 10 categories — enough to prove the pipeline, not to claim real-world accuracy.
+
+## How the AI part works
+
+<details>
+<summary>RAG pipeline, data and evaluation</summary>
+
+```
+Jenkins failure log
+  → utils/log_cleaning.py   strip ANSI/timestamps, reject empty or binary input
+  → utils/pii_masking.py    mask emails, IPs, tokens, keys, secrets
+  → rag/retrieval.py        top-k similar incidents from ChromaDB (MiniLM embeddings)
+  → rag/rca_generation.py   grounded prompt → LLM (OpenAI-compatible API)
+                            retries with backoff, JSON validation,
+                            low-confidence flag, fallback to LLM-only reasoning
+  → RCA + fix recommendation
+```
+
+Rebuild the data and index locally:
+
+```bash
+python scripts/generate_synthetic_data.py   # 40 labelled logs, 10 root-cause categories
+python finetune/finetune_embeddings.py      # optional: domain fine-tuning of MiniLM
+python scripts/ingest_logs.py               # load into ChromaDB
+python scripts/evaluate_retrieval.py        # Top-1 / Top-3 accuracy → data/evaluation_report.json
+```
+
+`jenkins/Jenkinsfile.example` shows how a real pipeline would call `/rca`
+on failure and post the result to Slack.
+
+</details>

@@ -34,7 +34,9 @@ makes AWS API calls, so none of the earlier Docker/RAM problems apply.
 
 ```bash
 cd terraform
-terraform init      # downloads the aws/vpc/eks providers+modules
+# Day 5+: state lives in S3. The bucket name ends in the account ID, so it
+# is passed here instead of being committed in versions.tf.
+terraform init -backend-config="bucket=auto-rca-bot-tfstate-$(aws sts get-caller-identity --query Account --output text)"
 terraform plan       # shows what will be created — read this before applying
 terraform apply       # takes ~12-15 minutes, mostly waiting on the EKS control plane
 ```

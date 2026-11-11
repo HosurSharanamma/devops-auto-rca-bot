@@ -16,12 +16,14 @@ terraform {
   # between sessions -- it holds the cheap, long-lived things: ECR repos,
   # the GitHub OIDC role, and the state bucket itself.
   #
-  # Backend blocks cannot use variables, so the bucket name is hardcoded.
   # use_lockfile = S3-native state locking (Terraform >= 1.10), so two
   # applies (e.g. laptop + CI) can't corrupt state at the same time --
   # no DynamoDB table needed any more.
+  # The bucket name is NOT hardcoded here: it ends in the AWS account ID.
+  # Backend blocks cannot read variables, so it is passed at init time
+  # (partial backend configuration). Works in bash and PowerShell:
+  #   terraform init -backend-config="bucket=auto-rca-bot-tfstate-$(aws sts get-caller-identity --query Account --output text)"
   backend "s3" {
-   bucket       = "auto-rca-bot-tfstate-533267099143"
     key          = "base/terraform.tfstate"
     region       = "eu-central-1"
     encrypt      = true
